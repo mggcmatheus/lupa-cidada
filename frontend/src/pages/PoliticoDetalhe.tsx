@@ -29,6 +29,7 @@ import {
   getEsferaLabel,
   calculateAge
 } from '../lib/utils';
+import { Timeline } from '../components/politicos/Timeline';
 
 export function PoliticoDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -391,6 +392,22 @@ export function PoliticoDetalhe() {
             </div>
           </>
         )}
+
+        {/* Timeline de histórico de cargos */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-accent-primary" />
+              Histórico de Cargos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Timeline 
+              cargoAtual={politico.cargoAtual}
+              historicoCargos={politico.historicoCargos || []}
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
