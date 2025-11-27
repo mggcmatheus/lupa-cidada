@@ -75,9 +75,17 @@ install-backend: ## Instala dependências do backend
 db-up: ## Inicia apenas MongoDB e Redis
 	docker-compose up -d mongodb redis meilisearch
 
-db-seed: ## Popula banco com dados de exemplo
-	@echo "$(YELLOW)🌱 Populando banco de dados...$(NC)"
-	cd backend && go run scripts/seed/main.go
+sync: ## Sincroniza dados das APIs públicas (Câmara + Senado)
+	@echo "$(YELLOW)🔄 Sincronizando dados das APIs públicas...$(NC)"
+	cd backend && go run cmd/sync/main.go -all
+
+sync-camara: ## Sincroniza apenas deputados da Câmara
+	@echo "$(YELLOW)🔄 Sincronizando deputados da Câmara...$(NC)"
+	cd backend && go run cmd/sync/main.go -camara
+
+sync-senado: ## Sincroniza apenas senadores do Senado
+	@echo "$(YELLOW)🔄 Sincronizando senadores do Senado...$(NC)"
+	cd backend && go run cmd/sync/main.go -senado
 
 # ==================== Testes ====================
 
