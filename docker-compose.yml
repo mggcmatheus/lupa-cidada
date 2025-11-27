@@ -1,0 +1,89 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: lupa-cidada-mongo
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: lupa
+      MONGO_INITDB_ROOT_PASSWORD: lupa_secret_2024
+      MONGO_INITDB_DATABASE: lupa_cidada
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - lupa-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: lupa-cidada-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - lupa-network
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: lupa-cidada-search
+    restart: unless-stopped
+    ports:
+      - "7701:7700"
+    environment:
+      MEILI_MASTER_KEY: lupa_search_key_2024
+      MEILI_ENV: development
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - lupa-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lupa-cidada-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGO_URI=mongodb://lupa:lupa_secret_2024@mongodb:27017/lupa_cidada?authSource=admin
+      - REDIS_URI=redis://redis:6379
+      - MEILI_HOST=http://meilisearch:7700
+      - MEILI_KEY=lupa_search_key_2024
+      - PORT=8080
+      - ENV=development
+    depends_on:
+      - mongodb
+      - redis
+      - meilisearch
+    networks:
+      - lupa-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lupa-cidada-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - lupa-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+  meilisearch_data:
+
+networks:
+  lupa-network:
+    driver: bridge
+

@@ -1,0 +1,122 @@
+package main
+
+import (
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/lupa-cidada/backend/internal/config"
+	"github.com/lupa-cidada/backend/internal/handlers"
+	"github.com/lupa-cidada/backend/internal/repository"
+	"github.com/lupa-cidada/backend/internal/services"
+	"github.com/lupa-cidada/backend/pkg/database"
+)
+
+func main() {
+	// Carregar configuração
+	cfg := config.Load()
+
+	// Conectar ao MongoDB
+	mongoClient, err := database.NewMongoClient(cfg.MongoURI)
+	if err != nil {
+		log.Fatalf("Erro ao conectar ao MongoDB: %v", err)
+	}
+	defer mongoClient.Disconnect(context.Background())
+
+	db := mongoClient.Database("lupa_cidada")
+
+	// Inicializar repositórios
+	politicoRepo := repository.NewPoliticoRepository(db)
+	votacaoRepo := repository.NewVotacaoRepository(db)
+	despesaRepo := repository.NewDespesaRepository(db)
+	proposicaoRepo := repository.NewProposicaoRepository(db)
+
+	// Inicializar serviços
+	politicoService := services.NewPoliticoService(politicoRepo, votacaoRepo, despesaRepo, proposicaoRepo)
+
+	// Inicializar handlers
+	politicoHandler := handlers.NewPoliticoHandler(politicoService)
+	filtrosHandler := handlers.NewFiltrosHandler(db)
+	estatisticasHandler := handlers.NewEstatisticasHandler(politicoService)
+
+	// Configurar Echo
+	e := echo.New()
+	e.HideBanner = true
+
+	// Middlewares
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	e.Use(middleware.RequestID())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"http://localhost:5173", "http://localhost:3000"},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+	}))
+
+	// Health check
+	e.GET("/health", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "ok",
+			"time":   time.Now().Format(time.RFC3339),
+		})
+	})
+
+	// API v1
+	api := e.Group("/api/v1")
+
+	// Rotas de políticos
+	politicos := api.Group("/politicos")
+	politicos.GET("", politicoHandler.Listar)
+	politicos.GET("/:id", politicoHandler.BuscarPorID)
+	politicos.GET("/:id/estatisticas", politicoHandler.BuscarEstatisticas)
+	politicos.GET("/:id/votacoes", politicoHandler.ListarVotacoes)
+	politicos.GET("/:id/despesas", politicoHandler.ListarDespesas)
+	politicos.GET("/:id/proposicoes", politicoHandler.ListarProposicoes)
+	politicos.GET("/:id/presencas", politicoHandler.ListarPresencas)
+	politicos.GET("/comparar", politicoHandler.Comparar)
+
+	// Rotas de filtros
+	filtros := api.Group("/filtros")
+	filtros.GET("/partidos", filtrosHandler.ListarPartidos)
+	filtros.GET("/estados", filtrosHandler.ListarEstados)
+	filtros.GET("/cargos", filtrosHandler.ListarCargos)
+
+	// Rotas de estatísticas
+	estatisticas := api.Group("/estatisticas")
+	estatisticas.GET("/geral", estatisticasHandler.Geral)
+	estatisticas.GET("/ranking", estatisticasHandler.Ranking)
+
+	// Rota de busca
+	api.GET("/busca", politicoHandler.Buscar)
+
+	// Iniciar servidor
+	go func() {
+		addr := ":" + cfg.Port
+		log.Printf("🚀 Servidor iniciado em http://localhost%s", addr)
+		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Erro ao iniciar servidor: %v", err)
+		}
+	}()
+
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Encerrando servidor...")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := e.Shutdown(ctx); err != nil {
+		log.Fatalf("Erro ao encerrar servidor: %v", err)
+	}
+
+	log.Println("Servidor encerrado")
+}
+
