@@ -31,7 +31,27 @@ api.interceptors.response.use(
 // Políticos
 export const politicosApi = {
   listar: async (filtros?: FiltrosPoliticos): Promise<PaginatedResponse<Politico>> => {
-    const { data } = await api.get('/politicos', { params: filtros });
+    // Converter arrays em strings separadas por vírgula (formato esperado pelo backend)
+    const params: Record<string, string | number | boolean | undefined> = {};
+    
+    if (filtros) {
+      Object.entries(filtros).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+          return;
+        }
+        
+        // Arrays devem ser convertidos para strings separadas por vírgula
+        if (Array.isArray(value)) {
+          if (value.length > 0) {
+            params[key] = value.join(',');
+          }
+        } else {
+          params[key] = value;
+        }
+      });
+    }
+    
+    const { data } = await api.get('/politicos', { params });
     return data;
   },
 
