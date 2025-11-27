@@ -5,6 +5,7 @@ import "os"
 type Config struct {
 	Port      string
 	Env       string
+	Debug     bool // Se true, usa dados mockados; se false, usa banco
 	MongoURI  string
 	RedisURI  string
 	MeiliHost string
@@ -15,6 +16,7 @@ func Load() *Config {
 	return &Config{
 		Port:      getEnv("PORT", "8080"),
 		Env:       getEnv("ENV", "development"),
+		Debug:     getEnv("DEBUG", "true") == "true",
 		MongoURI:  getEnv("MONGO_URI", "mongodb://localhost:27017/lupa_cidada"),
 		RedisURI:  getEnv("REDIS_URI", "redis://localhost:6379"),
 		MeiliHost: getEnv("MEILI_HOST", "http://localhost:7700"),
@@ -28,4 +30,3 @@ func getEnv(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-

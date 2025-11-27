@@ -10,14 +10,41 @@ import (
 )
 
 type FiltrosHandler struct {
-	db *mongo.Database
+	db    *mongo.Database
+	debug bool
 }
 
-func NewFiltrosHandler(db *mongo.Database) *FiltrosHandler {
-	return &FiltrosHandler{db: db}
+func NewFiltrosHandler(db *mongo.Database, debug bool) *FiltrosHandler {
+	return &FiltrosHandler{db: db, debug: debug}
 }
 
 func (h *FiltrosHandler) ListarPartidos(c echo.Context) error {
+	if h.debug || h.db == nil {
+		// Retorna partidos mockados
+		partidos := []map[string]string{
+			{"sigla": "PT", "nome": "Partido dos Trabalhadores", "cor": "#CC0000"},
+			{"sigla": "PL", "nome": "Partido Liberal", "cor": "#003366"},
+			{"sigla": "UNIÃO", "nome": "União Brasil", "cor": "#2E3092"},
+			{"sigla": "PP", "nome": "Progressistas", "cor": "#0066CC"},
+			{"sigla": "MDB", "nome": "Movimento Democrático Brasileiro", "cor": "#00AA00"},
+			{"sigla": "PSD", "nome": "Partido Social Democrático", "cor": "#FF6600"},
+			{"sigla": "REPUBLICANOS", "nome": "Republicanos", "cor": "#0033CC"},
+			{"sigla": "PDT", "nome": "Partido Democrático Trabalhista", "cor": "#FF0000"},
+			{"sigla": "PSDB", "nome": "Partido da Social Democracia Brasileira", "cor": "#003399"},
+			{"sigla": "PSOL", "nome": "Partido Socialismo e Liberdade", "cor": "#FFD700"},
+			{"sigla": "PSB", "nome": "Partido Socialista Brasileiro", "cor": "#FF6347"},
+			{"sigla": "PODE", "nome": "Podemos", "cor": "#00CED1"},
+			{"sigla": "CIDADANIA", "nome": "Cidadania", "cor": "#9932CC"},
+			{"sigla": "AVANTE", "nome": "Avante", "cor": "#FF8C00"},
+			{"sigla": "SOLIDARIEDADE", "nome": "Solidariedade", "cor": "#FF4500"},
+			{"sigla": "PCdoB", "nome": "Partido Comunista do Brasil", "cor": "#8B0000"},
+			{"sigla": "PV", "nome": "Partido Verde", "cor": "#228B22"},
+			{"sigla": "NOVO", "nome": "Partido Novo", "cor": "#FF6600"},
+			{"sigla": "REDE", "nome": "Rede Sustentabilidade", "cor": "#00AA66"},
+		}
+		return c.JSON(http.StatusOK, partidos)
+	}
+
 	cursor, err := h.db.Collection("partidos").Find(context.Background(), bson.M{})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -84,4 +111,3 @@ func (h *FiltrosHandler) ListarCargos(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, cargos)
 }
-

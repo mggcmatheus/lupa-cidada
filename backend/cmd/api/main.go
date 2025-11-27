@@ -16,33 +16,49 @@ import (
 	"github.com/lupa-cidada/backend/internal/repository"
 	"github.com/lupa-cidada/backend/internal/services"
 	"github.com/lupa-cidada/backend/pkg/database"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func main() {
 	// Carregar configuração
 	cfg := config.Load()
 
-	// Conectar ao MongoDB
-	mongoClient, err := database.NewMongoClient(cfg.MongoURI)
-	if err != nil {
-		log.Fatalf("Erro ao conectar ao MongoDB: %v", err)
+	var db *mongo.Database
+	var mongoClient *mongo.Client
+
+	// Só conecta ao MongoDB se não estiver em modo debug
+	if !cfg.Debug {
+		var err error
+		mongoClient, err = database.NewMongoClient(cfg.MongoURI)
+		if err != nil {
+			log.Fatalf("Erro ao conectar ao MongoDB: %v", err)
+		}
+		defer mongoClient.Disconnect(context.Background())
+		db = mongoClient.Database("lupa_cidada")
+		log.Println("📦 Conectado ao MongoDB")
+	} else {
+		log.Println("🔧 Modo DEBUG ativado - usando dados mockados")
 	}
-	defer mongoClient.Disconnect(context.Background())
 
-	db := mongoClient.Database("lupa_cidada")
+	// Inicializar repositórios (podem ser nil em modo debug)
+	var politicoRepo *repository.PoliticoRepository
+	var votacaoRepo *repository.VotacaoRepository
+	var despesaRepo *repository.DespesaRepository
+	var proposicaoRepo *repository.ProposicaoRepository
 
-	// Inicializar repositórios
-	politicoRepo := repository.NewPoliticoRepository(db)
-	votacaoRepo := repository.NewVotacaoRepository(db)
-	despesaRepo := repository.NewDespesaRepository(db)
-	proposicaoRepo := repository.NewProposicaoRepository(db)
+	if db != nil {
+		politicoRepo = repository.NewPoliticoRepository(db)
+		votacaoRepo = repository.NewVotacaoRepository(db)
+		despesaRepo = repository.NewDespesaRepository(db)
+		proposicaoRepo = repository.NewProposicaoRepository(db)
+	}
 
-	// Inicializar serviços
-	politicoService := services.NewPoliticoService(politicoRepo, votacaoRepo, despesaRepo, proposicaoRepo)
+	// Inicializar serviços (passa cfg.Debug para decidir fonte dos dados)
+	politicoService := services.NewPoliticoService(cfg.Debug, politicoRepo, votacaoRepo, despesaRepo, proposicaoRepo)
 
 	// Inicializar handlers
 	politicoHandler := handlers.NewPoliticoHandler(politicoService)
-	filtrosHandler := handlers.NewFiltrosHandler(db)
+	filtrosHandler := handlers.NewFiltrosHandler(db, cfg.Debug)
 	estatisticasHandler := handlers.NewEstatisticasHandler(politicoService)
 
 	// Configurar Echo
@@ -54,15 +70,16 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:5173", "http://localhost:3000"},
+		AllowOrigins: []string{"http://localhost:5173", "http://localhost:5174", "http://localhost:3000"},
 		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
 	}))
 
 	// Health check
 	e.GET("/health", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"status": "ok",
+			"debug":  cfg.Debug,
 			"time":   time.Now().Format(time.RFC3339),
 		})
 	})
@@ -73,13 +90,13 @@ func main() {
 	// Rotas de políticos
 	politicos := api.Group("/politicos")
 	politicos.GET("", politicoHandler.Listar)
+	politicos.GET("/comparar", politicoHandler.Comparar) // Deve vir antes de /:id
 	politicos.GET("/:id", politicoHandler.BuscarPorID)
 	politicos.GET("/:id/estatisticas", politicoHandler.BuscarEstatisticas)
 	politicos.GET("/:id/votacoes", politicoHandler.ListarVotacoes)
 	politicos.GET("/:id/despesas", politicoHandler.ListarDespesas)
 	politicos.GET("/:id/proposicoes", politicoHandler.ListarProposicoes)
 	politicos.GET("/:id/presencas", politicoHandler.ListarPresencas)
-	politicos.GET("/comparar", politicoHandler.Comparar)
 
 	// Rotas de filtros
 	filtros := api.Group("/filtros")
@@ -119,4 +136,3 @@ func main() {
 
 	log.Println("Servidor encerrado")
 }
-

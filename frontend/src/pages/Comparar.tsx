@@ -1,97 +1,23 @@
 import { Link } from 'react-router-dom';
-import { Scale, X, ArrowRight, Users, Vote, Receipt, FileText, TrendingUp } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Scale, X, ArrowRight, Users, Vote, Receipt, FileText, TrendingUp, Loader2 } from 'lucide-react';
+import { politicosApi } from '../services/api';
 import { useComparacaoStore } from '../stores/useComparacaoStore';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
 import { cn, formatCurrency, formatPercentage, getCargoLabel } from '../lib/utils';
-import type { Politico, EstatisticasPolitico } from '../types';
-
-// Mock data para demonstração
-const MOCK_POLITICOS_DETALHES: Record<string, { politico: Politico; estatisticas: EstatisticasPolitico }> = {
-  '1': {
-    politico: {
-      id: '1',
-      nome: 'João Silva',
-      nomeCivil: 'João Pedro da Silva Santos',
-      fotoUrl: 'https://www.camara.leg.br/internet/deputado/bandep/placeholder.png',
-      dataNascimento: '1965-03-15',
-      genero: 'M',
-      partido: { sigla: 'PT', nome: 'Partido dos Trabalhadores', cor: '#CC0000' },
-      cargoAtual: {
-        tipo: 'DEPUTADO_FEDERAL',
-        esfera: 'FEDERAL',
-        estado: 'SP',
-        dataInicio: '2023-02-01',
-        emExercicio: true,
-      },
-      historicoCargos: [],
-      contato: { email: 'joao.silva@camara.leg.br' },
-      redesSociais: {},
-      salarioBruto: 33763.00,
-      salarioLiquido: 25000.00,
-      createdAt: '2024-01-01',
-      updatedAt: '2024-01-01',
-    },
-    estatisticas: {
-      totalVotacoes: 245,
-      votosSim: 180,
-      votosNao: 45,
-      abstencoes: 10,
-      ausencias: 10,
-      percentualPresenca: 95.8,
-      totalProposicoes: 32,
-      proposicoesAprovadas: 8,
-      totalDespesas: 156000.00,
-      mediaGastoMensal: 13000.00,
-    },
-  },
-  '2': {
-    politico: {
-      id: '2',
-      nome: 'Maria Santos',
-      nomeCivil: 'Maria das Graças Santos',
-      fotoUrl: 'https://www.camara.leg.br/internet/deputado/bandep/placeholder.png',
-      dataNascimento: '1970-07-22',
-      genero: 'F',
-      partido: { sigla: 'PL', nome: 'Partido Liberal', cor: '#003366' },
-      cargoAtual: {
-        tipo: 'SENADOR',
-        esfera: 'FEDERAL',
-        estado: 'RJ',
-        dataInicio: '2023-02-01',
-        emExercicio: true,
-      },
-      historicoCargos: [],
-      contato: { email: 'maria.santos@senado.leg.br' },
-      redesSociais: {},
-      salarioBruto: 41650.92,
-      salarioLiquido: 30000.00,
-      createdAt: '2024-01-01',
-      updatedAt: '2024-01-01',
-    },
-    estatisticas: {
-      totalVotacoes: 189,
-      votosSim: 120,
-      votosNao: 50,
-      abstencoes: 15,
-      ausencias: 4,
-      percentualPresenca: 97.8,
-      totalProposicoes: 45,
-      proposicoesAprovadas: 12,
-      totalDespesas: 198000.00,
-      mediaGastoMensal: 16500.00,
-    },
-  },
-};
+import type { EstatisticasPolitico } from '../types';
 
 export function Comparar() {
   const { politicosSelecionados, removerPolitico, limparSelecao } = useComparacaoStore();
 
-  const politicosComDados = politicosSelecionados
-    .map((id) => MOCK_POLITICOS_DETALHES[id])
-    .filter(Boolean);
+  const { data, isLoading } = useQuery({
+    queryKey: ['comparar', politicosSelecionados],
+    queryFn: () => politicosApi.comparar(politicosSelecionados),
+    enabled: politicosSelecionados.length >= 1,
+  });
 
   if (politicosSelecionados.length === 0) {
     return (
@@ -118,6 +44,20 @@ export function Comparar() {
       </div>
     );
   }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen py-16 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-accent-primary mx-auto mb-4" />
+          <p className="text-content-secondary">Carregando comparação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const politicos = data?.politicos || [];
+  const estatisticas = (data?.estatisticas || {}) as Record<string, EstatisticasPolitico>;
 
   return (
     <div className="min-h-screen py-8">
@@ -148,86 +88,91 @@ export function Comparar() {
         {/* Cards dos políticos */}
         <div className={cn(
           'grid gap-6 mb-8',
-          politicosComDados.length === 1 && 'grid-cols-1 max-w-md',
-          politicosComDados.length === 2 && 'grid-cols-1 md:grid-cols-2',
-          politicosComDados.length === 3 && 'grid-cols-1 md:grid-cols-3',
-          politicosComDados.length >= 4 && 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
+          politicos.length === 1 && 'grid-cols-1 max-w-md',
+          politicos.length === 2 && 'grid-cols-1 md:grid-cols-2',
+          politicos.length === 3 && 'grid-cols-1 md:grid-cols-3',
+          politicos.length >= 4 && 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
         )}>
-          {politicosComDados.map(({ politico, estatisticas }) => (
-            <Card key={politico.id} className="relative">
-              {/* Botão remover */}
-              <button
-                onClick={() => removerPolitico(politico.id)}
-                className="absolute top-3 right-3 p-1.5 rounded-lg bg-background-secondary hover:bg-accent-danger/20 text-content-muted hover:text-accent-danger transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {politicos.map((politico) => {
+            const stats = estatisticas[politico.id];
+            return (
+              <Card key={politico.id} className="relative">
+                {/* Botão remover */}
+                <button
+                  onClick={() => removerPolitico(politico.id)}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg bg-background-secondary hover:bg-accent-danger/20 text-content-muted hover:text-accent-danger transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
 
-              <CardContent className="pt-6">
-                {/* Foto e nome */}
-                <div className="text-center mb-6">
-                  <Avatar
-                    src={politico.fotoUrl}
-                    alt={politico.nome}
-                    size="lg"
-                    className="mx-auto mb-3"
-                  />
-                  <h3 className="font-semibold text-content-primary">
-                    {politico.nome}
-                  </h3>
-                  <p className="text-sm text-content-secondary">
-                    {politico.partido.sigla} - {politico.cargoAtual.estado}
-                  </p>
-                  <Badge variant="info" className="mt-2">
-                    {getCargoLabel(politico.cargoAtual.tipo)}
-                  </Badge>
-                </div>
+                <CardContent className="pt-6">
+                  {/* Foto e nome */}
+                  <div className="text-center mb-6">
+                    <Avatar
+                      src={politico.fotoUrl}
+                      alt={politico.nome}
+                      size="lg"
+                      className="mx-auto mb-3"
+                    />
+                    <h3 className="font-semibold text-content-primary">
+                      {politico.nome}
+                    </h3>
+                    <p className="text-sm text-content-secondary">
+                      {politico.partido.sigla} - {politico.cargoAtual.estado}
+                    </p>
+                    <Badge variant="info" className="mt-2">
+                      {getCargoLabel(politico.cargoAtual.tipo)}
+                    </Badge>
+                  </div>
 
-                {/* Estatísticas */}
-                <div className="space-y-4">
-                  <StatItem
-                    icon={TrendingUp}
-                    label="Presença"
-                    value={formatPercentage(estatisticas.percentualPresenca)}
-                    color="text-accent-success"
-                  />
-                  <StatItem
-                    icon={Vote}
-                    label="Votações"
-                    value={estatisticas.totalVotacoes.toString()}
-                    color="text-accent-primary"
-                  />
-                  <StatItem
-                    icon={FileText}
-                    label="Proposições"
-                    value={`${estatisticas.proposicoesAprovadas}/${estatisticas.totalProposicoes}`}
-                    color="text-accent-secondary"
-                  />
-                  <StatItem
-                    icon={Receipt}
-                    label="Gasto médio/mês"
-                    value={formatCurrency(estatisticas.mediaGastoMensal)}
-                    color="text-accent-warning"
-                  />
-                </div>
+                  {/* Estatísticas */}
+                  {stats && (
+                    <div className="space-y-4">
+                      <StatItem
+                        icon={TrendingUp}
+                        label="Presença"
+                        value={formatPercentage(stats.percentualPresenca)}
+                        color="text-accent-success"
+                      />
+                      <StatItem
+                        icon={Vote}
+                        label="Votações"
+                        value={stats.totalVotacoes.toString()}
+                        color="text-accent-primary"
+                      />
+                      <StatItem
+                        icon={FileText}
+                        label="Proposições"
+                        value={`${stats.proposicoesAprovadas}/${stats.totalProposicoes}`}
+                        color="text-accent-secondary"
+                      />
+                      <StatItem
+                        icon={Receipt}
+                        label="Gasto médio/mês"
+                        value={formatCurrency(stats.mediaGastoMensal)}
+                        color="text-accent-warning"
+                      />
+                    </div>
+                  )}
 
-                {/* Link para detalhes */}
-                <div className="mt-6 pt-4 border-t border-border">
-                  <Link
-                    to={`/politicos/${politico.id}`}
-                    className="flex items-center justify-center gap-2 text-sm text-accent-primary hover:text-accent-primary/80 transition-colors"
-                  >
-                    Ver perfil completo
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  {/* Link para detalhes */}
+                  <div className="mt-6 pt-4 border-t border-border">
+                    <Link
+                      to={`/politicos/${politico.id}`}
+                      className="flex items-center justify-center gap-2 text-sm text-accent-primary hover:text-accent-primary/80 transition-colors"
+                    >
+                      Ver perfil completo
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Tabela comparativa detalhada */}
-        {politicosComDados.length >= 2 && (
+        {politicos.length >= 2 && (
           <Card>
             <CardHeader>
               <CardTitle>Comparativo Detalhado</CardTitle>
@@ -240,7 +185,7 @@ export function Comparar() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-content-secondary">
                         Métrica
                       </th>
-                      {politicosComDados.map(({ politico }) => (
+                      {politicos.map((politico) => (
                         <th key={politico.id} className="text-center py-3 px-4 text-sm font-medium text-content-primary">
                           {politico.nome}
                         </th>
@@ -250,51 +195,51 @@ export function Comparar() {
                   <tbody>
                     <CompareRow
                       label="Partido"
-                      values={politicosComDados.map(({ politico }) => politico.partido.sigla)}
+                      values={politicos.map((p) => p.partido.sigla)}
                     />
                     <CompareRow
                       label="Cargo"
-                      values={politicosComDados.map(({ politico }) => getCargoLabel(politico.cargoAtual.tipo))}
+                      values={politicos.map((p) => getCargoLabel(p.cargoAtual.tipo))}
                     />
                     <CompareRow
                       label="Presença"
-                      values={politicosComDados.map(({ estatisticas }) => formatPercentage(estatisticas.percentualPresenca))}
+                      values={politicos.map((p) => formatPercentage(estatisticas[p.id]?.percentualPresenca || 0))}
                       highlight="max"
                     />
                     <CompareRow
                       label="Total Votações"
-                      values={politicosComDados.map(({ estatisticas }) => estatisticas.totalVotacoes.toString())}
+                      values={politicos.map((p) => (estatisticas[p.id]?.totalVotacoes || 0).toString())}
                       highlight="max"
                     />
                     <CompareRow
                       label="Votos Sim"
-                      values={politicosComDados.map(({ estatisticas }) => estatisticas.votosSim.toString())}
+                      values={politicos.map((p) => (estatisticas[p.id]?.votosSim || 0).toString())}
                     />
                     <CompareRow
                       label="Votos Não"
-                      values={politicosComDados.map(({ estatisticas }) => estatisticas.votosNao.toString())}
+                      values={politicos.map((p) => (estatisticas[p.id]?.votosNao || 0).toString())}
                     />
                     <CompareRow
                       label="Abstenções"
-                      values={politicosComDados.map(({ estatisticas }) => estatisticas.abstencoes.toString())}
+                      values={politicos.map((p) => (estatisticas[p.id]?.abstencoes || 0).toString())}
                     />
                     <CompareRow
                       label="Proposições"
-                      values={politicosComDados.map(({ estatisticas }) => estatisticas.totalProposicoes.toString())}
+                      values={politicos.map((p) => (estatisticas[p.id]?.totalProposicoes || 0).toString())}
                       highlight="max"
                     />
                     <CompareRow
                       label="Proposições Aprovadas"
-                      values={politicosComDados.map(({ estatisticas }) => estatisticas.proposicoesAprovadas.toString())}
+                      values={politicos.map((p) => (estatisticas[p.id]?.proposicoesAprovadas || 0).toString())}
                       highlight="max"
                     />
                     <CompareRow
                       label="Salário Bruto"
-                      values={politicosComDados.map(({ politico }) => formatCurrency(politico.salarioBruto))}
+                      values={politicos.map((p) => formatCurrency(p.salarioBruto))}
                     />
                     <CompareRow
                       label="Gasto Médio Mensal"
-                      values={politicosComDados.map(({ estatisticas }) => formatCurrency(estatisticas.mediaGastoMensal))}
+                      values={politicos.map((p) => formatCurrency(estatisticas[p.id]?.mediaGastoMensal || 0))}
                       highlight="min"
                     />
                   </tbody>
@@ -364,4 +309,3 @@ function CompareRow({ label, values, highlight }: CompareRowProps) {
     </tr>
   );
 }
-
