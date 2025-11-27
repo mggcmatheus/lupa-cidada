@@ -63,6 +63,27 @@ func (s *SenadoSync) SyncSenadores(ctx context.Context) error {
 	return nil
 }
 
+// buscarPoliticoExistente busca um político existente por nome+data de nascimento
+func (s *SenadoSync) buscarPoliticoExistente(ctx context.Context, nomeCivil string, dataNascimento time.Time) (*domain.Politico, error) {
+	collection := s.db.Collection("politicos")
+
+	if nomeCivil != "" && !dataNascimento.IsZero() {
+		var politico domain.Politico
+		err := collection.FindOne(ctx, bson.M{
+			"nome_civil":      nomeCivil,
+			"data_nascimento": dataNascimento,
+		}).Decode(&politico)
+		if err == nil {
+			return &politico, nil
+		}
+		if err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+	}
+
+	return nil, nil // Não encontrado
+}
+
 // syncSenador sincroniza um senador específico
 func (s *SenadoSync) syncSenador(ctx context.Context, sen Parlamentar) error {
 	id := sen.IdentificacaoParlamentar
@@ -76,6 +97,13 @@ func (s *SenadoSync) syncSenador(ctx context.Context, sen Parlamentar) error {
 	}
 
 	d := detalhes.DetalheParlamentar.Parlamentar
+	dataNascimento := ParseDate(d.DadosBasicosParlamentar.DataNascimento)
+
+	// Buscar se o político já existe no banco
+	politicoExistente, err := s.buscarPoliticoExistente(ctx, id.NomeCompletoParlamentar, dataNascimento)
+	if err != nil {
+		return fmt.Errorf("erro ao buscar político existente: %w", err)
+	}
 
 	// Determinar data de início do mandato
 	var dataInicio time.Time
@@ -86,32 +114,97 @@ func (s *SenadoSync) syncSenador(ctx context.Context, sen Parlamentar) error {
 		dataInicio = time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC)
 	}
 
-	// Mapear para nosso modelo
-	politico := domain.Politico{
-		Nome:           id.NomeParlamentar,
-		NomeCivil:      id.NomeCompletoParlamentar,
-		FotoURL:        id.URLFotoParlamentar,
-		DataNascimento: ParseDate(d.DadosBasicosParlamentar.DataNascimento),
-		Genero:         mapGenero(id.SexoParlamentar),
-		Partido: domain.Partido{
+	// Criar cargo do senador
+	novoCargo := domain.CargoAtual{
+		Tipo:        domain.CargoSenador,
+		Esfera:      domain.EsferaFederal,
+		Estado:      id.UfParlamentar,
+		DataInicio:  dataInicio,
+		EmExercicio: true, // Senado só retorna em exercício
+	}
+
+	var politico domain.Politico
+	var historicoCargos []domain.CargoAtual
+
+	if politicoExistente != nil {
+		// Político já existe - atualizar dados e gerenciar histórico
+		politico = *politicoExistente
+
+		// Copiar histórico existente
+		historicoCargos = make([]domain.CargoAtual, len(politico.HistoricoCargos))
+		copy(historicoCargos, politico.HistoricoCargos)
+
+		// Se o cargo atual mudou, mover para histórico
+		cargoAtualMudou := politico.CargoAtual.Tipo != novoCargo.Tipo ||
+			politico.CargoAtual.Estado != novoCargo.Estado ||
+			!politico.CargoAtual.DataInicio.Equal(novoCargo.DataInicio)
+
+		if cargoAtualMudou && politico.CargoAtual.Tipo != "" {
+			// Definir data de fim do cargo anterior
+			cargoAnterior := politico.CargoAtual
+			if cargoAnterior.DataFim.IsZero() {
+				cargoAnterior.DataFim = time.Now()
+			}
+			cargoAnterior.EmExercicio = false
+
+			// Adicionar ao histórico (evitar duplicatas)
+			jaExiste := false
+			for _, hc := range historicoCargos {
+				if hc.Tipo == cargoAnterior.Tipo &&
+					hc.Estado == cargoAnterior.Estado &&
+					hc.DataInicio.Equal(cargoAnterior.DataInicio) {
+					jaExiste = true
+					break
+				}
+			}
+			if !jaExiste {
+				historicoCargos = append(historicoCargos, cargoAnterior)
+			}
+		}
+
+		// Atualizar cargo atual
+		politico.CargoAtual = novoCargo
+
+		// Atualizar outros dados se necessário
+		if id.URLFotoParlamentar != "" {
+			politico.FotoURL = id.URLFotoParlamentar
+		}
+		if id.EmailParlamentar != "" {
+			politico.Contato.Email = id.EmailParlamentar
+		}
+		if d.DadosBasicosParlamentar.EnderecoParlamentar != "" {
+			politico.Contato.Gabinete = d.DadosBasicosParlamentar.EnderecoParlamentar
+		}
+		politico.Partido = domain.Partido{
 			Sigla: id.SiglaPartidoParlamentar,
 			Nome:  "",
 			Cor:   getPartidoCor(id.SiglaPartidoParlamentar),
-		},
-		CargoAtual: domain.CargoAtual{
-			Tipo:        domain.CargoSenador,
-			Esfera:      domain.EsferaFederal,
-			Estado:      id.UfParlamentar,
-			DataInicio:  dataInicio,
-			EmExercicio: true,
-		},
-		Contato: domain.Contato{
-			Email:    id.EmailParlamentar,
-			Gabinete: d.DadosBasicosParlamentar.EnderecoParlamentar,
-		},
-		SalarioBruto:   41650.92, // Salário de senador
-		SalarioLiquido: 30000.00,
-		UpdatedAt:      time.Now(),
+		}
+	} else {
+		// Novo político - criar registro
+		politico = domain.Politico{
+			Nome:           id.NomeParlamentar,
+			NomeCivil:      id.NomeCompletoParlamentar,
+			FotoURL:        id.URLFotoParlamentar,
+			DataNascimento: dataNascimento,
+			Genero:         mapGenero(id.SexoParlamentar),
+			Partido: domain.Partido{
+				Sigla: id.SiglaPartidoParlamentar,
+				Nome:  "",
+				Cor:   getPartidoCor(id.SiglaPartidoParlamentar),
+			},
+			CargoAtual: novoCargo,
+			Contato: domain.Contato{
+				Email:    id.EmailParlamentar,
+				Gabinete: d.DadosBasicosParlamentar.EnderecoParlamentar,
+			},
+			SalarioBruto:    41650.92, // Salário de senador
+			SalarioLiquido:  30000.00,
+			HistoricoCargos: []domain.CargoAtual{},
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		}
+		historicoCargos = []domain.CargoAtual{}
 	}
 
 	// Adicionar telefone se disponível
@@ -119,29 +212,40 @@ func (s *SenadoSync) syncSenador(ctx context.Context, sen Parlamentar) error {
 		politico.Contato.Telefone = d.Telefones.Telefone[0].NumeroTelefone
 	}
 
+	// Atualizar histórico
+	politico.HistoricoCargos = historicoCargos
+	politico.UpdatedAt = time.Now()
+
 	// Upsert no MongoDB
 	collection := s.db.Collection("politicos")
-	filter := bson.M{
-		"nome":               politico.Nome,
-		"cargo_atual.tipo":   domain.CargoSenador,
-		"cargo_atual.estado": politico.CargoAtual.Estado,
+	var filter bson.M
+
+	if politicoExistente != nil {
+		// Atualizar existente
+		filter = bson.M{"_id": politicoExistente.ID}
+	} else {
+		// Inserir novo
+		filter = bson.M{
+			"nome_civil":      id.NomeCompletoParlamentar,
+			"data_nascimento": dataNascimento,
+		}
 	}
 
-	// Usar $set para campos que sempre atualizam
 	update := bson.M{
 		"$set": bson.M{
-			"nome":            politico.Nome,
-			"nome_civil":      politico.NomeCivil,
-			"foto_url":        politico.FotoURL,
-			"data_nascimento": politico.DataNascimento,
-			"genero":          politico.Genero,
-			"partido":         politico.Partido,
-			"cargo_atual":     politico.CargoAtual,
-			"contato":         politico.Contato,
-			"redes_sociais":   politico.RedesSociais,
-			"salario_bruto":   politico.SalarioBruto,
-			"salario_liquido": politico.SalarioLiquido,
-			"updated_at":      time.Now(),
+			"nome":             politico.Nome,
+			"nome_civil":       politico.NomeCivil,
+			"foto_url":         politico.FotoURL,
+			"data_nascimento":  politico.DataNascimento,
+			"genero":           politico.Genero,
+			"partido":          politico.Partido,
+			"cargo_atual":      politico.CargoAtual,
+			"historico_cargos": politico.HistoricoCargos,
+			"contato":          politico.Contato,
+			"redes_sociais":    politico.RedesSociais,
+			"salario_bruto":    politico.SalarioBruto,
+			"salario_liquido":  politico.SalarioLiquido,
+			"updated_at":       time.Now(),
 		},
 		"$setOnInsert": bson.M{
 			"_id":        primitive.NewObjectID(),
@@ -150,7 +254,7 @@ func (s *SenadoSync) syncSenador(ctx context.Context, sen Parlamentar) error {
 	}
 
 	opts := options.Update().SetUpsert(true)
-	_, err := collection.UpdateOne(ctx, filter, update, opts)
+	_, err = collection.UpdateOne(ctx, filter, update, opts)
 	return err
 }
 

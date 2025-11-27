@@ -43,6 +43,7 @@ export interface CargoAtual {
 
 export interface Politico {
   id: string;
+  cpf?: string;
   nome: string;
   nomeCivil: string;
   fotoUrl: string;

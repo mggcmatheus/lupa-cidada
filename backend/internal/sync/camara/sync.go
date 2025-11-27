@@ -79,6 +79,40 @@ func (s *CamaraSync) SyncDeputados(ctx context.Context) error {
 	return nil
 }
 
+// buscarPoliticoExistente busca um político existente por CPF ou nome+data de nascimento
+func (s *CamaraSync) buscarPoliticoExistente(ctx context.Context, cpf string, nomeCivil string, dataNascimento time.Time) (*domain.Politico, error) {
+	collection := s.db.Collection("politicos")
+
+	// Tentar buscar por CPF primeiro (mais confiável)
+	if cpf != "" {
+		var politico domain.Politico
+		err := collection.FindOne(ctx, bson.M{"cpf": cpf}).Decode(&politico)
+		if err == nil {
+			return &politico, nil
+		}
+		if err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+	}
+
+	// Se não encontrou por CPF, tentar por nome civil + data de nascimento
+	if nomeCivil != "" && !dataNascimento.IsZero() {
+		var politico domain.Politico
+		err := collection.FindOne(ctx, bson.M{
+			"nome_civil":      nomeCivil,
+			"data_nascimento": dataNascimento,
+		}).Decode(&politico)
+		if err == nil {
+			return &politico, nil
+		}
+		if err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+	}
+
+	return nil, nil // Não encontrado
+}
+
 // syncDeputado sincroniza um deputado específico
 func (s *CamaraSync) syncDeputado(ctx context.Context, dep DeputadoResumo) error {
 	// Buscar detalhes do deputado
@@ -89,37 +123,136 @@ func (s *CamaraSync) syncDeputado(ctx context.Context, dep DeputadoResumo) error
 	}
 
 	d := detalhes.Dados
+	dataNascimento := ParseDate(d.DataNascimento)
 
-	// Mapear para nosso modelo
-	politico := domain.Politico{
-		Nome:           d.UltimoStatus.Nome,
-		NomeCivil:      d.NomeCivil,
-		FotoURL:        d.UltimoStatus.URLFoto,
-		DataNascimento: ParseDate(d.DataNascimento),
-		Genero:         mapGenero(d.Sexo),
-		Partido: domain.Partido{
-			Sigla: d.UltimoStatus.SiglaPartido,
-			Nome:  "", // Será preenchido depois
-			Cor:   getPartidoCor(d.UltimoStatus.SiglaPartido),
-		},
-		CargoAtual: domain.CargoAtual{
-			Tipo:        domain.CargoDeputadoFederal,
-			Esfera:      domain.EsferaFederal,
-			Estado:      d.UltimoStatus.SiglaUF,
-			DataInicio:  ParseDate(d.UltimoStatus.Data),
-			EmExercicio: d.UltimoStatus.Situacao == "Exercício",
-		},
-		Contato: domain.Contato{
-			Email: d.UltimoStatus.Email,
-		},
-		RedesSociais:   mapRedesSociais(d.RedeSocial),
-		SalarioBruto:   33763.00, // Salário padrão de deputado federal
-		SalarioLiquido: 25000.00,
-		UpdatedAt:      time.Now(),
+	// Buscar se o político já existe no banco
+	politicoExistente, err := s.buscarPoliticoExistente(ctx, d.CPF, d.NomeCivil, dataNascimento)
+	if err != nil {
+		return fmt.Errorf("erro ao buscar político existente: %w", err)
 	}
 
-	// Preencher gabinete se disponível
-	if d.UltimoStatus.Gabinete != nil {
+	// Criar cargo do deputado
+	novoCargo := domain.CargoAtual{
+		Tipo:        domain.CargoDeputadoFederal,
+		Esfera:      domain.EsferaFederal,
+		Estado:      d.UltimoStatus.SiglaUF,
+		DataInicio:  ParseDate(d.UltimoStatus.Data),
+		EmExercicio: d.UltimoStatus.Situacao == "Exercício",
+	}
+
+	// Se não está em exercício, definir data de fim
+	if !novoCargo.EmExercicio {
+		novoCargo.DataFim = time.Now()
+	}
+
+	var politico domain.Politico
+	var historicoCargos []domain.CargoAtual
+
+	if politicoExistente != nil {
+		// Político já existe - atualizar dados e gerenciar histórico
+		politico = *politicoExistente
+
+		// Copiar histórico existente
+		historicoCargos = make([]domain.CargoAtual, len(politico.HistoricoCargos))
+		copy(historicoCargos, politico.HistoricoCargos)
+
+		// Se o cargo atual mudou, mover para histórico
+		cargoAtualMudou := politico.CargoAtual.Tipo != novoCargo.Tipo ||
+			politico.CargoAtual.Estado != novoCargo.Estado ||
+			!politico.CargoAtual.DataInicio.Equal(novoCargo.DataInicio)
+
+		if cargoAtualMudou && politico.CargoAtual.Tipo != "" {
+			// Definir data de fim do cargo anterior
+			cargoAnterior := politico.CargoAtual
+			if cargoAnterior.DataFim.IsZero() {
+				cargoAnterior.DataFim = time.Now()
+			}
+			cargoAnterior.EmExercicio = false
+
+			// Adicionar ao histórico (evitar duplicatas)
+			jaExiste := false
+			for _, hc := range historicoCargos {
+				if hc.Tipo == cargoAnterior.Tipo &&
+					hc.Estado == cargoAnterior.Estado &&
+					hc.DataInicio.Equal(cargoAnterior.DataInicio) {
+					jaExiste = true
+					break
+				}
+			}
+			if !jaExiste {
+				historicoCargos = append(historicoCargos, cargoAnterior)
+			}
+		}
+
+		// Atualizar cargo atual apenas se estiver em exercício
+		if novoCargo.EmExercicio {
+			politico.CargoAtual = novoCargo
+		} else {
+			// Se não está em exercício, adicionar ao histórico
+			jaExiste := false
+			for _, hc := range historicoCargos {
+				if hc.Tipo == novoCargo.Tipo &&
+					hc.Estado == novoCargo.Estado &&
+					hc.DataInicio.Equal(novoCargo.DataInicio) {
+					jaExiste = true
+					break
+				}
+			}
+			if !jaExiste {
+				historicoCargos = append(historicoCargos, novoCargo)
+			}
+		}
+
+		// Atualizar outros dados se necessário
+		if d.UltimoStatus.URLFoto != "" {
+			politico.FotoURL = d.UltimoStatus.URLFoto
+		}
+		if d.UltimoStatus.Email != "" {
+			politico.Contato.Email = d.UltimoStatus.Email
+		}
+		politico.RedesSociais = mapRedesSociais(d.RedeSocial)
+		politico.Partido = domain.Partido{
+			Sigla: d.UltimoStatus.SiglaPartido,
+			Nome:  "",
+			Cor:   getPartidoCor(d.UltimoStatus.SiglaPartido),
+		}
+	} else {
+		// Novo político - criar registro
+		politico = domain.Politico{
+			CPF:            d.CPF,
+			Nome:           d.UltimoStatus.Nome,
+			NomeCivil:      d.NomeCivil,
+			FotoURL:        d.UltimoStatus.URLFoto,
+			DataNascimento: dataNascimento,
+			Genero:         mapGenero(d.Sexo),
+			Partido: domain.Partido{
+				Sigla: d.UltimoStatus.SiglaPartido,
+				Nome:  "",
+				Cor:   getPartidoCor(d.UltimoStatus.SiglaPartido),
+			},
+			Contato: domain.Contato{
+				Email: d.UltimoStatus.Email,
+			},
+			RedesSociais:   mapRedesSociais(d.RedeSocial),
+			SalarioBruto:   33763.00,
+			SalarioLiquido: 25000.00,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+		}
+
+		// Se está em exercício, definir como cargo atual
+		// Se não está, adicionar ao histórico
+		if novoCargo.EmExercicio {
+			politico.CargoAtual = novoCargo
+			historicoCargos = []domain.CargoAtual{}
+		} else {
+			politico.CargoAtual = domain.CargoAtual{} // Vazio até ter outro cargo
+			historicoCargos = []domain.CargoAtual{novoCargo}
+		}
+	}
+
+	// Preencher gabinete se disponível e estiver em exercício
+	if novoCargo.EmExercicio && d.UltimoStatus.Gabinete != nil {
 		g := d.UltimoStatus.Gabinete
 		politico.Contato.Gabinete = fmt.Sprintf("%s, %s, Sala %s", g.Predio, g.Andar, g.Sala)
 		if g.Telefone != "" {
@@ -127,29 +260,46 @@ func (s *CamaraSync) syncDeputado(ctx context.Context, dep DeputadoResumo) error
 		}
 	}
 
-	// Upsert no MongoDB (atualiza se existir, insere se não)
+	// Atualizar histórico
+	politico.HistoricoCargos = historicoCargos
+	politico.UpdatedAt = time.Now()
+
+	// Upsert no MongoDB
 	collection := s.db.Collection("politicos")
-	filter := bson.M{
-		"nome":               politico.Nome,
-		"cargo_atual.tipo":   domain.CargoDeputadoFederal,
-		"cargo_atual.estado": politico.CargoAtual.Estado,
+	var filter bson.M
+
+	if politicoExistente != nil {
+		// Atualizar existente
+		filter = bson.M{"_id": politicoExistente.ID}
+	} else {
+		// Inserir novo
+		filter = bson.M{
+			"$or": []bson.M{
+				{"cpf": d.CPF},
+				{
+					"nome_civil":      d.NomeCivil,
+					"data_nascimento": dataNascimento,
+				},
+			},
+		}
 	}
 
-	// Usar $set para campos que sempre atualizam
 	update := bson.M{
 		"$set": bson.M{
-			"nome":            politico.Nome,
-			"nome_civil":      politico.NomeCivil,
-			"foto_url":        politico.FotoURL,
-			"data_nascimento": politico.DataNascimento,
-			"genero":          politico.Genero,
-			"partido":         politico.Partido,
-			"cargo_atual":     politico.CargoAtual,
-			"contato":         politico.Contato,
-			"redes_sociais":   politico.RedesSociais,
-			"salario_bruto":   politico.SalarioBruto,
-			"salario_liquido": politico.SalarioLiquido,
-			"updated_at":      time.Now(),
+			"cpf":              politico.CPF,
+			"nome":             politico.Nome,
+			"nome_civil":       politico.NomeCivil,
+			"foto_url":         politico.FotoURL,
+			"data_nascimento":  politico.DataNascimento,
+			"genero":           politico.Genero,
+			"partido":          politico.Partido,
+			"cargo_atual":      politico.CargoAtual,
+			"historico_cargos": politico.HistoricoCargos,
+			"contato":          politico.Contato,
+			"redes_sociais":    politico.RedesSociais,
+			"salario_bruto":    politico.SalarioBruto,
+			"salario_liquido":  politico.SalarioLiquido,
+			"updated_at":       time.Now(),
 		},
 		"$setOnInsert": bson.M{
 			"_id":        primitive.NewObjectID(),
@@ -158,7 +308,7 @@ func (s *CamaraSync) syncDeputado(ctx context.Context, dep DeputadoResumo) error
 	}
 
 	opts := options.Update().SetUpsert(true)
-	_, err := collection.UpdateOne(ctx, filter, update, opts)
+	_, err = collection.UpdateOne(ctx, filter, update, opts)
 	return err
 }
 

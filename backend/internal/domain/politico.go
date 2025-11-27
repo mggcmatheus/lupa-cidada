@@ -71,6 +71,7 @@ type RedesSociais struct {
 // Politico representa um político no sistema
 type Politico struct {
 	ID              primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	CPF             string             `json:"cpf,omitempty" bson:"cpf,omitempty"`
 	Nome            string             `json:"nome" bson:"nome"`
 	NomeCivil       string             `json:"nomeCivil" bson:"nome_civil"`
 	FotoURL         string             `json:"fotoUrl" bson:"foto_url"`
@@ -129,4 +130,3 @@ type PaginatedResponse[T any] struct {
 	PorPagina    int   `json:"porPagina"`
 	TotalPaginas int   `json:"totalPaginas"`
 }
-

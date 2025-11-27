@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/lupa-cidada/backend/internal/sync/camara"
+	"github.com/lupa-cidada/backend/internal/sync/governadores"
+	"github.com/lupa-cidada/backend/internal/sync/presidente"
 	"github.com/lupa-cidada/backend/internal/sync/senado"
 	"github.com/lupa-cidada/backend/pkg/database"
 )
@@ -17,11 +19,13 @@ func main() {
 	mongoURI := flag.String("mongo", getEnv("MONGO_URI", "mongodb://lupa:lupa_secret_2024@localhost:27018/lupa_cidada?authSource=admin"), "MongoDB URI")
 	syncCamara := flag.Bool("camara", false, "Sincronizar deputados da Câmara")
 	syncSenado := flag.Bool("senado", false, "Sincronizar senadores do Senado")
+	syncPresidente := flag.Bool("presidente", false, "Sincronizar Presidente da República")
+	syncGovernadores := flag.Bool("governadores", false, "Sincronizar Governadores")
 	syncAll := flag.Bool("all", false, "Sincronizar tudo")
 	flag.Parse()
 
 	// Se nenhuma flag específica, sincronizar tudo
-	if !*syncCamara && !*syncSenado {
+	if !*syncCamara && !*syncSenado && !*syncPresidente && !*syncGovernadores {
 		*syncAll = true
 	}
 
@@ -65,6 +69,30 @@ func main() {
 		senadoSync := senado.NewSenadoSync(db)
 		if err := senadoSync.SyncSenadores(ctx); err != nil {
 			log.Printf("❌ Erro na sincronização do Senado: %v", err)
+		}
+	}
+
+	// Sincronizar Presidente
+	if *syncAll || *syncPresidente {
+		log.Println("")
+		log.Println("🇧🇷 PRESIDÊNCIA DA REPÚBLICA")
+		log.Println("----------------------------")
+
+		presidenteSync := presidente.NewPresidenteSync(db)
+		if err := presidenteSync.SyncPresidente(ctx); err != nil {
+			log.Printf("❌ Erro na sincronização do Presidente: %v", err)
+		}
+	}
+
+	// Sincronizar Governadores
+	if *syncAll || *syncGovernadores {
+		log.Println("")
+		log.Println("🏛️  GOVERNADORES DOS ESTADOS")
+		log.Println("----------------------------")
+
+		governadoresSync := governadores.NewGovernadoresSync(db)
+		if err := governadoresSync.SyncGovernadores(ctx); err != nil {
+			log.Printf("❌ Erro na sincronização dos Governadores: %v", err)
 		}
 	}
 

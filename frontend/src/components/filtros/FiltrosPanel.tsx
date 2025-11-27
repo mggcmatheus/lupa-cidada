@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Filter, X, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -6,6 +7,7 @@ import { Select } from '../ui/Select';
 import { Badge } from '../ui/Badge';
 import { cn } from '../../lib/utils';
 import { useFiltrosStore } from '../../stores/useFiltrosStore';
+import { politicosApi } from '../../services/api';
 import type { Cargo, Esfera, Genero } from '../../types';
 
 const CARGOS: { value: Cargo; label: string }[] = [
@@ -45,6 +47,34 @@ interface FiltrosPanelProps {
 export function FiltrosPanel({ onClose, isMobile }: FiltrosPanelProps) {
   const { filtros, setFiltro, limparFiltros } = useFiltrosStore();
   const [expandedSections, setExpandedSections] = useState<string[]>(['cargo', 'status']);
+
+  // Buscar contagens por cargo usando useQueries
+  const contagensQueries = useQuery({
+    queryKey: ['politicos-contagens-cargo'],
+    queryFn: async () => {
+      const contagens: Record<Cargo, number> = {} as Record<Cargo, number>;
+      
+      // Buscar contagem para cada cargo
+      await Promise.all(
+        CARGOS.map(async (cargo) => {
+          try {
+            const result = await politicosApi.listar({ 
+              cargo: [cargo.value], 
+              porPagina: 1 
+            });
+            contagens[cargo.value] = result.total || 0;
+          } catch (error) {
+            contagens[cargo.value] = 0;
+          }
+        })
+      );
+      
+      return contagens;
+    },
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+  });
+
+  const contagensPorCargo = contagensQueries.data || ({} as Record<Cargo, number>);
 
   const toggleSection = (section: string) => {
     setExpandedSections((prev) =>
@@ -130,20 +160,36 @@ export function FiltrosPanel({ onClose, isMobile }: FiltrosPanelProps) {
           onToggle={() => toggleSection('cargo')}
         >
           <div className="flex flex-wrap gap-2">
-            {CARGOS.map((cargo) => (
-              <button
-                key={cargo.value}
-                onClick={() => toggleArrayFilter('cargo', cargo.value)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                  filtros.cargo?.includes(cargo.value)
-                    ? 'bg-accent-primary text-background'
-                    : 'bg-background-secondary text-content-secondary hover:bg-background-hover'
-                )}
-              >
-                {cargo.label}
-              </button>
-            ))}
+            {CARGOS.map((cargo) => {
+              const count = contagensPorCargo[cargo.value] || 0;
+              return (
+                <button
+                  key={cargo.value}
+                  onClick={() => toggleArrayFilter('cargo', cargo.value)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                    filtros.cargo?.includes(cargo.value)
+                      ? 'bg-accent-primary text-background'
+                      : 'bg-background-secondary text-content-secondary hover:bg-background-hover'
+                  )}
+                >
+                  <span>{cargo.label}</span>
+                  {count > 0 && (
+                    <Badge 
+                      variant="secondary" 
+                      className={cn(
+                        'text-xs',
+                        filtros.cargo?.includes(cargo.value)
+                          ? 'bg-background/30 text-background'
+                          : ''
+                      )}
+                    >
+                      {count}
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </FilterSection>
 
