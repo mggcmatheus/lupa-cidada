@@ -25,6 +25,20 @@ dev-backend: ## Inicia apenas o backend
 	@echo "$(BLUE)⚙️  Iniciando backend...$(NC)"
 	cd backend && go run cmd/api/main.go
 
+stop: ## Para backend e frontend
+	@echo "$(YELLOW)🛑 Parando serviços...$(NC)"
+	@make stop-backend
+	@make stop-frontend
+
+stop-backend: ## Para o backend
+	@echo "$(BLUE)🛑 Parando backend...$(NC)"
+	@pkill -f "go-build.*main" 2>/dev/null || true
+	@pkill -f "go run cmd/api" 2>/dev/null || true
+
+stop-frontend: ## Para o frontend
+	@echo "$(BLUE)🛑 Parando frontend...$(NC)"
+	@pkill -f "vite" 2>/dev/null || true
+
 # ==================== Docker ====================
 
 docker-up: ## Sobe todos os containers
