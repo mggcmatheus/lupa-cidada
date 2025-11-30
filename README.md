@@ -9,6 +9,8 @@ Uma plataforma moderna e acessível para acompanhar a atuação dos políticos b
 ![React](https://img.shields.io/badge/React-18+-61DAFB?logo=react)
 ![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb)
 
+ ![Tela Inicial](images/main-page.png)
+ ![Politicos](images/second-page.png)
 ---
 
 ## ✨ Funcionalidades
@@ -22,9 +24,6 @@ Uma plataforma moderna e acessível para acompanhar a atuação dos políticos b
 - 📈 **Estatísticas** - Presença em votações, produtividade legislativa
 
 ---
- ![Tela Inicial](images/main-page.png)
- ![Politicos](images/second-page.png)
-
 ## 🚀 Quick Start
 
 ### Pré-requisitos
