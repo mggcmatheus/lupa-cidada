@@ -48,3 +48,4 @@ temp/
 # Docker volumes (local)
 data/
 
+.cursor/
