@@ -79,9 +79,39 @@ sync: ## Sincroniza dados das APIs públicas (Câmara + Senado + Presidente + Go
 	@echo "$(YELLOW)🔄 Sincronizando dados das APIs públicas...$(NC)"
 	cd backend && go run cmd/sync/main.go -all
 
+sync-all: ## Sincroniza TUDO: políticos + votações + proposições + despesas + presenças
+	@echo "$(YELLOW)🔄 Sincronizando TODOS os dados...$(NC)"
+	@echo "$(BLUE)1️⃣  Sincronizando políticos...$(NC)"
+	cd backend && go run cmd/sync/main.go -all
+	@echo "$(BLUE)2️⃣  Sincronizando votações, proposições, despesas e presenças...$(NC)"
+	cd backend && go run cmd/sync/main.go -votacoes -proposicoes -despesas -presencas -ano $(shell date +%Y)
+
 sync-camara: ## Sincroniza apenas deputados da Câmara
 	@echo "$(YELLOW)🔄 Sincronizando deputados da Câmara...$(NC)"
 	cd backend && go run cmd/sync/main.go -camara
+
+sync-camara-completo: ## Sincroniza deputados + todos os dados da Câmara (votações, proposições, despesas, presenças)
+	@echo "$(YELLOW)🔄 Sincronizando dados completos da Câmara...$(NC)"
+	@echo "$(BLUE)1️⃣  Sincronizando deputados...$(NC)"
+	cd backend && go run cmd/sync/main.go -camara
+	@echo "$(BLUE)2️⃣  Sincronizando votações, proposições, despesas e presenças...$(NC)"
+	cd backend && go run cmd/sync/main.go -votacoes -proposicoes -despesas -presencas -ano $(shell date +%Y)
+
+sync-votacoes: ## Sincroniza votações da Câmara (ano atual)
+	@echo "$(YELLOW)🔄 Sincronizando votações...$(NC)"
+	cd backend && go run cmd/sync/main.go -votacoes -ano $(shell date +%Y)
+
+sync-proposicoes: ## Sincroniza proposições da Câmara (ano atual)
+	@echo "$(YELLOW)🔄 Sincronizando proposições...$(NC)"
+	cd backend && go run cmd/sync/main.go -proposicoes -ano $(shell date +%Y)
+
+sync-despesas: ## Sincroniza despesas da Câmara (ano atual)
+	@echo "$(YELLOW)🔄 Sincronizando despesas...$(NC)"
+	cd backend && go run cmd/sync/main.go -despesas -ano $(shell date +%Y)
+
+sync-presencas: ## Sincroniza presenças em eventos da Câmara (ano atual)
+	@echo "$(YELLOW)🔄 Sincronizando presenças...$(NC)"
+	cd backend && go run cmd/sync/main.go -presencas -ano $(shell date +%Y)
 
 sync-senado: ## Sincroniza apenas senadores do Senado
 	@echo "$(YELLOW)🔄 Sincronizando senadores do Senado...$(NC)"

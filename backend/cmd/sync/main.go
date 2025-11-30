@@ -21,6 +21,11 @@ func main() {
 	syncSenado := flag.Bool("senado", false, "Sincronizar senadores do Senado")
 	syncPresidente := flag.Bool("presidente", false, "Sincronizar Presidente da República")
 	syncGovernadores := flag.Bool("governadores", false, "Sincronizar Governadores")
+	syncVotacoes := flag.Bool("votacoes", false, "Sincronizar votações da Câmara")
+	syncProposicoes := flag.Bool("proposicoes", false, "Sincronizar proposições da Câmara")
+	syncDespesas := flag.Bool("despesas", false, "Sincronizar despesas da Câmara")
+	syncPresencas := flag.Bool("presencas", false, "Sincronizar presenças em eventos da Câmara")
+	ano := flag.Int("ano", time.Now().Year(), "Ano para sincronização de votações, proposições, despesas e presenças")
 	syncAll := flag.Bool("all", false, "Sincronizar tudo")
 	flag.Parse()
 
@@ -57,6 +62,47 @@ func main() {
 		camaraSync := camara.NewCamaraSync(db)
 		if err := camaraSync.SyncDeputados(ctx); err != nil {
 			log.Printf("❌ Erro na sincronização da Câmara: %v", err)
+		}
+	}
+
+	// Sincronizar dados adicionais da Câmara
+	if *syncAll || *syncVotacoes || *syncProposicoes || *syncDespesas || *syncPresencas {
+		camaraSync := camara.NewCamaraSync(db)
+
+		if *syncAll || *syncVotacoes {
+			log.Println("")
+			log.Println("📊 VOTAÇÕES DA CÂMARA")
+			log.Println("---------------------")
+			if err := camaraSync.SyncVotacoes(ctx, *ano); err != nil {
+				log.Printf("❌ Erro na sincronização de votações: %v", err)
+			}
+		}
+
+		if *syncAll || *syncProposicoes {
+			log.Println("")
+			log.Println("📄 PROPOSIÇÕES DA CÂMARA")
+			log.Println("------------------------")
+			if err := camaraSync.SyncProposicoes(ctx, *ano); err != nil {
+				log.Printf("❌ Erro na sincronização de proposições: %v", err)
+			}
+		}
+
+		if *syncAll || *syncDespesas {
+			log.Println("")
+			log.Println("💰 DESPESAS DA CÂMARA")
+			log.Println("---------------------")
+			if err := camaraSync.SyncDespesas(ctx, *ano); err != nil {
+				log.Printf("❌ Erro na sincronização de despesas: %v", err)
+			}
+		}
+
+		if *syncAll || *syncPresencas {
+			log.Println("")
+			log.Println("✅ PRESENÇAS EM EVENTOS DA CÂMARA")
+			log.Println("----------------------------------")
+			if err := camaraSync.SyncPresencas(ctx, *ano); err != nil {
+				log.Printf("❌ Erro na sincronização de presenças: %v", err)
+			}
 		}
 	}
 

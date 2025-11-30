@@ -219,6 +219,104 @@ type StatusProposicao struct {
 	Ambito            string `json:"ambito"`
 }
 
+// AutoresResponse representa a resposta de autores de uma proposição
+type AutoresResponse struct {
+	Dados []Autor `json:"dados"`
+}
+
+// Autor representa um autor de proposição
+type Autor struct {
+	URI        string `json:"uri"`
+	Nome       string `json:"nome"`
+	CodTipo    int    `json:"codTipo"`
+	Tipo       string `json:"tipo"`
+	ID         int    `json:"id"`
+	URIPartido string `json:"uriPartido"`
+}
+
+// TramitacoesResponse representa a resposta de tramitações
+type TramitacoesResponse struct {
+	Dados []Tramitacao `json:"dados"`
+	Links []Link       `json:"links"`
+}
+
+// Tramitacao representa uma tramitação de proposição
+type Tramitacao struct {
+	DataHora          string `json:"dataHora"`
+	Sequencia         int    `json:"sequencia"`
+	SiglaOrgao        string `json:"siglaOrgao"`
+	URIOrgao          string `json:"uriOrgao"`
+	Regime            string `json:"regime"`
+	DescTramitacao    string `json:"descricaoTramitacao"`
+	CodTipoTramitacao string `json:"codTipoTramitacao"`
+	DescSituacao      string `json:"descricaoSituacao"`
+	CodSituacao       int    `json:"codSituacao"`
+	Despacho          string `json:"despacho"`
+	URL               string `json:"url"`
+	Ambito            string `json:"ambito"`
+}
+
+// EventosResponse representa a resposta de eventos
+type EventosResponse struct {
+	Dados []Evento `json:"dados"`
+	Links []Link   `json:"links"`
+}
+
+// Evento representa um evento (sessão, reunião, etc.)
+type Evento struct {
+	ID             int           `json:"id"`
+	URI            string        `json:"uri"`
+	DataHoraInicio string        `json:"dataHoraInicio"`
+	DataHoraFim    string        `json:"dataHoraFim"`
+	Situacao       string        `json:"situacao"`
+	DescricaoTipo  string        `json:"descricaoTipo"`
+	Descricao      string        `json:"descricao"`
+	LocalExterno   string        `json:"localExterno"`
+	LocalCamara    *LocalCamara  `json:"localCamara"`
+	Orgaos         []OrgaoEvento `json:"orgaos"`
+}
+
+// LocalCamara representa o local da Câmara
+type LocalCamara struct {
+	Nome   string `json:"nome"`
+	Predio string `json:"predio"`
+	Sala   string `json:"sala"`
+	Andar  string `json:"andar"`
+}
+
+// OrgaoEvento representa um órgão do evento
+type OrgaoEvento struct {
+	ID      int    `json:"id"`
+	URI     string `json:"uri"`
+	Sigla   string `json:"sigla"`
+	Nome    string `json:"nome"`
+	Apelido string `json:"apelido"`
+}
+
+// PresencasEventoResponse representa a resposta de presenças em um evento
+type PresencasEventoResponse struct {
+	Dados []PresencaEvento `json:"dados"`
+}
+
+// PresencaEvento representa a presença de um deputado em um evento
+type PresencaEvento struct {
+	DataHoraRegistro string       `json:"dataHoraRegistro"`
+	Deputado         DeputadoVoto `json:"deputado_"`
+}
+
+// TemasResponse representa a resposta de temas de uma proposição
+type TemasResponse struct {
+	Dados []Tema `json:"dados"`
+}
+
+// Tema representa um tema de proposição
+type Tema struct {
+	ID        int    `json:"id"`
+	URI       string `json:"uri"`
+	Nome      string `json:"nome"`
+	Descricao string `json:"descricao"`
+}
+
 // Link representa um link de paginação
 type Link struct {
 	Rel  string `json:"rel"`

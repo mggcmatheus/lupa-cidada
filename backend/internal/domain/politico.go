@@ -70,22 +70,28 @@ type RedesSociais struct {
 
 // Politico representa um político no sistema
 type Politico struct {
-	ID              primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	CPF             string             `json:"cpf,omitempty" bson:"cpf,omitempty"`
-	Nome            string             `json:"nome" bson:"nome"`
-	NomeCivil       string             `json:"nomeCivil" bson:"nome_civil"`
-	FotoURL         string             `json:"fotoUrl" bson:"foto_url"`
-	DataNascimento  time.Time          `json:"dataNascimento" bson:"data_nascimento"`
-	Genero          Genero             `json:"genero" bson:"genero"`
-	Partido         Partido            `json:"partido" bson:"partido"`
-	CargoAtual      CargoAtual         `json:"cargoAtual" bson:"cargo_atual"`
-	HistoricoCargos []CargoAtual       `json:"historicoCargos" bson:"historico_cargos"`
-	Contato         Contato            `json:"contato" bson:"contato"`
-	RedesSociais    RedesSociais       `json:"redesSociais" bson:"redes_sociais"`
-	SalarioBruto    float64            `json:"salarioBruto" bson:"salario_bruto"`
-	SalarioLiquido  float64            `json:"salarioLiquido" bson:"salario_liquido"`
-	CreatedAt       time.Time          `json:"createdAt" bson:"created_at"`
-	UpdatedAt       time.Time          `json:"updatedAt" bson:"updated_at"`
+	ID                  primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	CPF                 string             `json:"cpf,omitempty" bson:"cpf,omitempty"`
+	Nome                string             `json:"nome" bson:"nome"`
+	NomeCivil           string             `json:"nomeCivil" bson:"nome_civil"`
+	NomeEleitoral       string             `json:"nomeEleitoral,omitempty" bson:"nome_eleitoral,omitempty"`
+	FotoURL             string             `json:"fotoUrl" bson:"foto_url"`
+	DataNascimento      time.Time          `json:"dataNascimento" bson:"data_nascimento"`
+	Genero              Genero             `json:"genero" bson:"genero"`
+	Partido             Partido            `json:"partido" bson:"partido"`
+	CargoAtual          CargoAtual         `json:"cargoAtual" bson:"cargo_atual"`
+	HistoricoCargos     []CargoAtual       `json:"historicoCargos" bson:"historico_cargos"`
+	Contato             Contato            `json:"contato" bson:"contato"`
+	RedesSociais        RedesSociais       `json:"redesSociais" bson:"redes_sociais"`
+	SalarioBruto        float64            `json:"salarioBruto" bson:"salario_bruto"`
+	SalarioLiquido      float64            `json:"salarioLiquido" bson:"salario_liquido"`
+	Escolaridade        string             `json:"escolaridade,omitempty" bson:"escolaridade,omitempty"`
+	MunicipioNascimento string             `json:"municipioNascimento,omitempty" bson:"municipio_nascimento,omitempty"`
+	UFNascimento        string             `json:"ufNascimento,omitempty" bson:"uf_nascimento,omitempty"`
+	Website             string             `json:"website,omitempty" bson:"website,omitempty"`
+	IDExternoCamara     int                `json:"idExternoCamara,omitempty" bson:"id_externo_camara,omitempty"` // ID da API da Câmara
+	CreatedAt           time.Time          `json:"createdAt" bson:"created_at"`
+	UpdatedAt           time.Time          `json:"updatedAt" bson:"updated_at"`
 }
 
 // EstatisticasPolitico representa as estatísticas agregadas de um político
