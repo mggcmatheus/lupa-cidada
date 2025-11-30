@@ -22,6 +22,8 @@ Uma plataforma moderna e acessível para acompanhar a atuação dos políticos b
 - 📈 **Estatísticas** - Presença em votações, produtividade legislativa
 
 ---
+ ![Tela Inicial](images/main-page.png)
+ ![Politicos](images/second-page.png)
 
 ## 🚀 Quick Start
 
